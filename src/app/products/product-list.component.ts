@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 
-import { combineLatest, EMPTY, Observable } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { BehaviorSubject, combineLatest, EMPTY, Observable, Subject } from 'rxjs';
+import { catchError, filter, map, tap } from 'rxjs/operators';
 
 import { Product } from './product';
 import { ProductService } from './product.service';
@@ -15,7 +15,8 @@ import { ProductCategoryService } from '../product-categories/product-category.s
 export class ProductListComponent {
   pageTitle = 'Product List';
   errorMessage = '';
-  categories;
+  private categorySelectedSubject = new BehaviorSubject<number>(0);
+  private categorySelectedAction$ = this.categorySelectedSubject.asObservable();
 
   products$: Observable<Product[]> = this.productService.productsWithCategory$
     .pipe(
@@ -25,6 +26,26 @@ export class ProductListComponent {
       })
     );
 
+  public productsFiltered$: Observable<Product[]> = combineLatest(
+    [
+      this.productService.productsWithCategory$,
+      this.categorySelectedAction$
+    ])
+    .pipe(
+      tap(([products, categoryId]) => console.log(categoryId)),
+      map(([products, categoryId]) =>
+        products.filter(product =>
+          categoryId > 0 ? product.categoryId === categoryId : true))
+    );
+
+  categories$ = this.productCategoryService.productCategories$
+      .pipe(
+        catchError(err => {
+          this.errorMessage = err;
+          return EMPTY;
+        })
+      );
+
   constructor(private productService: ProductService, private productCategoryService: ProductCategoryService) { }
 
   onAdd(): void {
@@ -32,6 +53,6 @@ export class ProductListComponent {
   }
 
   onSelected(categoryId: string): void {
-    console.log('Not yet implemented');
+    this.categorySelectedSubject.next(+categoryId);
   }
 }

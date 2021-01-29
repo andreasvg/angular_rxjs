@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
-import { combineLatest, Observable, throwError } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+import { BehaviorSubject, combineLatest, merge, Observable, Subject, throwError } from 'rxjs';
+import { catchError, map, scan, tap } from 'rxjs/operators';
 
 import { Product } from './product';
 import { ProductCategory } from '../product-categories/product-category';
@@ -32,7 +32,7 @@ export class ProductService {
             catchError(this.handleError)
           );
 
-  productsWithCategory$: Observable<Product[]> = combineLatest(
+  public productsWithCategory$: Observable<Product[]> = combineLatest(
     [this.products$, this.productCategoryService.productCategories$]
   )
   .pipe(
@@ -43,9 +43,37 @@ export class ProductService {
         category: categories.find(c => product.categoryId === c.id).name  // get the category name from the categories stream
         } as Product)
       )
-    ),
-    catchError(this.handleError)
+    )
   );
+
+  private productSelectedSubject: BehaviorSubject<number> = new BehaviorSubject<number>(0);
+  private productSelectedAction$: Observable<number> = this.productSelectedSubject.asObservable();
+
+  public selectedProduct$ = combineLatest([this.productsWithCategory$, this.productSelectedAction$])
+        .pipe(
+          map(([products, selectedId]) => products.find(p => p.id === selectedId))
+        );
+
+  public selectedProductChanged(productId: number): void {
+    this.productSelectedSubject.next(productId);
+  }
+
+  private productInsertedSubject: Subject<Product> = new Subject<Product>();
+  public productInsertedAction$: Observable<Product> = this.productInsertedSubject.asObservable();
+
+  public productAdded(product: Product): void {
+    const newProduct = product ? product : this.fakeProduct();
+    this.productInsertedSubject.next(newProduct);
+  }
+
+  public productsWithAdd$ = merge(
+    this.productsWithCategory$,
+    this.productInsertedAction$
+  ).pipe(
+    scan((acc: Product[], curr: Product) => {
+      return [...acc, curr]
+    })
+  )
 
   private fakeProduct(): Product {
     return {
@@ -55,7 +83,7 @@ export class ProductService {
       description: 'Our new product',
       price: 8.9,
       categoryId: 3,
-      // category: 'Toolbox',
+      category: 'Toolbox',
       quantityInStock: 30
     };
   }

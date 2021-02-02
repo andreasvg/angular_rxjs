@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
-import { BehaviorSubject, combineLatest, merge, Observable, Subject, throwError } from 'rxjs';
-import { catchError, map, scan, tap } from 'rxjs/operators';
+import { BehaviorSubject, combineLatest, from, merge, Observable, Subject, throwError } from 'rxjs';
+import { catchError, filter, map, mergeMap, scan, shareReplay, switchMap, tap, toArray } from 'rxjs/operators';
 
 import { Product } from './product';
 import { ProductCategory } from '../product-categories/product-category';
@@ -43,8 +43,10 @@ export class ProductService {
         category: categories.find(c => product.categoryId === c.id).name  // get the category name from the categories stream
         } as Product)
       )
-    )
+    ),
+    shareReplay(1)
   );
+
 
   private productSelectedSubject: BehaviorSubject<number> = new BehaviorSubject<number>(0);
   private productSelectedAction$: Observable<number> = this.productSelectedSubject.asObservable();
@@ -56,7 +58,30 @@ export class ProductService {
 
   public selectedProductChanged(productId: number): void {
     this.productSelectedSubject.next(productId);
-  }
+  };
+
+  /// Get it all approach:
+  // public suppliersForSelectedProduct$: Observable<Supplier[]> = combineLatest(
+  //   [this.selectedProduct$, this.supplierService.suppliers$]
+  // )
+  // .pipe(
+  //   map(([selectedProduct, suppliers]) =>
+  //     suppliers.filter(s => selectedProduct.supplierIds.includes(s.id)) as Supplier[]
+  //   )
+  // );
+
+  /// Just In Time approach:
+  public suppliersForSelectedProduct$: Observable<Supplier[]> = this.selectedProduct$
+    .pipe(
+      filter(selectedProduct => Boolean(selectedProduct)),    // only proceed if we have a selected product
+      switchMap(product =>
+        from(product.supplierIds)
+        .pipe(
+          mergeMap(id => this.http.get<Supplier>(`${this.suppliersUrl}/${id}`)),
+          toArray()
+        )
+      )
+    );
 
   private productInsertedSubject: Subject<Product> = new Subject<Product>();
   public productInsertedAction$: Observable<Product> = this.productInsertedSubject.asObservable();
@@ -64,7 +89,7 @@ export class ProductService {
   public productAdded(product: Product): void {
     const newProduct = product ? product : this.fakeProduct();
     this.productInsertedSubject.next(newProduct);
-  }
+  };
 
   public productsWithAdd$ = merge(
     this.productsWithCategory$,

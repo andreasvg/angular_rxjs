@@ -14,38 +14,53 @@ import { ProductCategoryService } from '../product-categories/product-category.s
 })
 export class ProductListComponent {
   pageTitle = 'Product List';
-  errorMessage = '';
+  private errorMessageSubject = new Subject<string>();
+  public errorMessage$ = this.errorMessageSubject.asObservable();
   private categorySelectedSubject = new BehaviorSubject<number>(0);
   private categorySelectedAction$ = this.categorySelectedSubject.asObservable();
 
-  products$: Observable<Product[]> = this.productService.productsWithAdd$
-    .pipe(
-      tap(p => console.log(p)),
-      catchError(err => {
-        this.errorMessage = err;
-        return EMPTY;
-      })
-    );
+  // private products$: Observable<Product[]> = this.productService.productsWithAdd$
+  //   .pipe(
+  //     tap(p => console.log(p)),
+  //     catchError(err => {
+  //       this.errorMessage = err;
+  //       return EMPTY;
+  //     })
+  //   );
 
-  public productsFiltered$: Observable<Product[]> = combineLatest(
+  private productsFiltered$: Observable<Product[]> = combineLatest(
     [
       this.productService.productsWithAdd$,
       this.categorySelectedAction$
     ])
     .pipe(
+      catchError(err => {
+        this.errorMessageSubject.next(err);
+        return EMPTY;
+      }),
       tap(([products, categoryId]) => console.log(categoryId)),
       map(([products, categoryId]) =>
         products.filter(product =>
           categoryId > 0 ? product.categoryId === categoryId : true))
     );
 
-  categories$ = this.productCategoryService.productCategories$
+  private categories$ = this.productCategoryService.productCategories$
       .pipe(
         catchError(err => {
-          this.errorMessage = err;
+          this.errorMessageSubject.next(err);
           return EMPTY;
         })
       );
+
+  public vm$ = combineLatest([
+    this.productsFiltered$,
+    this.categories$
+  ]).pipe(
+    map(([products, categories]) => ({
+      products,
+      categories
+    }))
+  );
 
   constructor(private productService: ProductService, private productCategoryService: ProductCategoryService) { }
 

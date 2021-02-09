@@ -20,58 +20,73 @@ export class ProductService {
   constructor(private http: HttpClient,
               private supplierService: SupplierService, private productCategoryService: ProductCategoryService) { }
 
-  public products$ = this.http.get<Product[]>(this.productsUrl)
-          .pipe(
-            // map((products: Product[]) =>    // map to an array of products (RxJS map operator)
-            //   products.map(product => ({    // use the JS array map method to transform each element
-            //     ...product,                 // spread the original object into the new object
-            //     price: product.price * 1.5, // modify the price property
-            //     searchKey: [product.productName]  // add a brand new property
-            //   }) as Product)
-            //   ),
-            catchError(this.handleError)
-          );
+  public get products$(): Observable<Product[]> {
+    return this.http.get<Product[]>(this.productsUrl)
+    .pipe(
+      // map((products: Product[]) =>    // map to an array of products (RxJS map operator)
+      //   products.map(product => ({    // use the JS array map method to transform each element
+      //     ...product,                 // spread the original object into the new object
+      //     price: product.price * 1.5, // modify the price property
+      //     searchKey: [product.productName]  // add a brand new property
+      //   }) as Product)
+      //   ),
+      catchError(this.handleError)
+    );
 
-  public productsWithCategory$: Observable<Product[]> = combineLatest(
-    [this.products$, this.productCategoryService.productCategories$]
-  )
-  .pipe(
-    map(([products, categories]) => // map to the arrays of products and product categories (RxJS map operator)
-      products.map(product => ({    // use the JS array map method to transform each element
-        ...product,                 // spread the original object into the new object
-        price: product.price * 1.5, // modify the price property
-        category: categories.find(c => product.categoryId === c.id).name  // get the category name from the categories stream
-        } as Product)
-      )
-    ),
-    shareReplay(1)
-  );
+  }
 
+  public get productsWithCategory$(): Observable<Product[]> {
+    return combineLatest(
+      [this.products$, this.productCategoryService.productCategories$]
+    )
+    .pipe(
+      map(([products, categories]) => // map to the arrays of products and product categories (RxJS map operator)
+        products.map(product => ({    // use the JS array map method to transform each element
+          ...product,                 // spread the original object into the new object
+          price: product.price * 1.5, // modify the price property
+          category: categories.find(c => product.categoryId === c.id).name  // get the category name from the categories stream
+          } as Product)
+        )
+      ),
+      shareReplay(1)
+    );
+  }
 
   private productSelectedSubject: BehaviorSubject<number> = new BehaviorSubject<number>(0);
   private productSelectedAction$: Observable<number> = this.productSelectedSubject.asObservable();
 
-  public selectedProduct$ = combineLatest([this.productsWithCategory$, this.productSelectedAction$])
-        .pipe(
-          map(([products, selectedId]) => products.find(p => p.id === selectedId))
-        );
+  // public selectedProduct$ = combineLatest([this.productsWithCategory$, this.productSelectedAction$])
+  //       .pipe(
+  //         map(([products, selectedId]) => products.find(p => p.id === selectedId))
+  //       );
 
   public selectedProductChanged(productId: number): void {
     this.productSelectedSubject.next(productId);
   };
 
-  /// Get it all approach:
-  // public suppliersForSelectedProduct$: Observable<Supplier[]> = combineLatest(
-  //   [this.selectedProduct$, this.supplierService.suppliers$]
-  // )
-  // .pipe(
-  //   map(([selectedProduct, suppliers]) =>
-  //     suppliers.filter(s => selectedProduct.supplierIds.includes(s.id)) as Supplier[]
-  //   )
-  // );
+
+  public get selectedProduct$(): Observable<Product> {
+    return combineLatest([this.productsWithCategory$, this.productSelectedAction$])
+    .pipe(
+      map(([products, selectedId]) => products.find(p => p.id === selectedId))
+    );
+  }
 
   /// Just In Time approach:
-  public suppliersForSelectedProduct$: Observable<Supplier[]> = this.selectedProduct$
+  // public suppliersForSelectedProduct$: Observable<Supplier[]> = this.selectedProduct$
+  //   .pipe(
+  //     filter(selectedProduct => Boolean(selectedProduct)),    // only proceed if we have a selected product
+  //     switchMap(product =>
+  //       from(product.supplierIds)
+  //       .pipe(
+  //         mergeMap(id => this.http.get<Supplier>(`${this.suppliersUrl}/${id}`)),
+  //         toArray()
+  //       )
+  //     )
+  //   );
+
+  public get suppliersForSelectedProduct$(): Observable<Supplier[]> {
+    return this.selectedProduct$
     .pipe(
       filter(selectedProduct => Boolean(selectedProduct)),    // only proceed if we have a selected product
       switchMap(product =>
@@ -82,23 +97,36 @@ export class ProductService {
         )
       )
     );
+  }
 
   private productInsertedSubject: Subject<Product> = new Subject<Product>();
-  public productInsertedAction$: Observable<Product> = this.productInsertedSubject.asObservable();
+  private productInsertedAction$: Observable<Product> = this.productInsertedSubject.asObservable();
 
   public productAdded(product: Product): void {
     const newProduct = product ? product : this.fakeProduct();
     this.productInsertedSubject.next(newProduct);
   };
 
-  public productsWithAdd$ = merge(
-    this.productsWithCategory$,
-    this.productInsertedAction$
-  ).pipe(
-    scan((acc: Product[], curr: Product) => {
-      return [...acc, curr]
-    })
-  )
+  // public productsWithAdd$ = merge(
+  //   this.productsWithCategory$,
+  //   this.productInsertedAction$
+  // ).pipe(
+  //   scan((acc: Product[], curr: Product) => {
+  //     return [...acc, curr]
+  //   })
+  // )
+
+  public get productsWithAdd(): Observable<Product[]> {
+    return merge(
+      this.productsWithCategory$,
+      this.productInsertedAction$
+    ).pipe(
+      scan((acc: Product[], curr: Product) => {
+        return [...acc, curr]
+      })
+    );
+  }
+
 
   private fakeProduct(): Product {
     return {

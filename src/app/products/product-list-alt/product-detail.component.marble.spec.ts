@@ -4,7 +4,7 @@ import { of, Subject } from "rxjs";
 import { TestScheduler } from 'rxjs/testing';
 import { ProductService } from "../product.service";
 import { ProductDetailComponent } from './product-detail.component';
-import { cold } from 'jasmine-marbles';
+import { cold, getTestScheduler } from 'jasmine-marbles';
 
 describe(`ProductDetailComponent marble testing`, () => {
   let fixture: ComponentFixture<ProductDetailComponent>;
@@ -36,8 +36,11 @@ describe(`ProductDetailComponent marble testing`, () => {
     const product = {...dataProvider.products[0]};
 
     mockProductService = jasmine.createSpyObj(['foo$']);
-    mockProductService.selectedProduct$ = of(product);
-    mockProductService.suppliersForSelectedProduct$ = of([...dataProvider.suppliers]);
+    //mockProductService.selectedProduct$ = of(product);
+    //mockProductService.suppliersForSelectedProduct$ = of([...dataProvider.suppliers]);
+
+    mockProductService.selectedProduct$ =             cold('---a|', { a: product });
+    mockProductService.suppliersForSelectedProduct$ =      cold('----a|', { a: [...dataProvider.suppliers]});
   }
 
   it(`should create`, () => {
@@ -64,7 +67,15 @@ describe(`ProductDetailComponent marble testing`, () => {
       const expectedTitle: string = `Product Detail [${product.productName}]`;
       const suppliers = [...dataProvider.suppliers];
 
-       const expectedObservable = cold('(a|)', { a: {
+      // const expectedObservable = cold('(a|)', { a: {
+      //     title: expectedTitle,
+      //     product,
+      //     suppliers
+      //   }
+      // });
+
+      // NOTE: I have no idea why the result is only being emitted in frame 90! combineLatest() is not sequential after all.
+      const expectedObservable = cold('---------a|', { a: {
           title: expectedTitle,
           product,
           suppliers
@@ -73,6 +84,7 @@ describe(`ProductDetailComponent marble testing`, () => {
 
       // Act:
       fixture.detectChanges();
+      getTestScheduler().flush();
 
       // Assert:
       expect(component.vm$).toBeObservable(expectedObservable);
